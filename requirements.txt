@@ -1,4 +1,3 @@
-selenium
-requests
-psutil
-pyautogui
+discord.py
+fastapi
+uvicorn
