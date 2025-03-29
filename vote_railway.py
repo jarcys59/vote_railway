@@ -4,56 +4,55 @@ from fastapi import FastAPI
 from threading import Thread
 import uvicorn
 import discord
-from datetime import datetime
 
 # === CONFIG ===
-DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")  # À définir sur Railway dans Variables
-PING_TIMEOUT = 60  # Durée max sans ping avant de passer hors ligne
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")  # Tu le définis sur Railway
+PING_TIMEOUT = 60  # Si aucun ping depuis vote_2.py en 60s → bot offline
+last_ping = time.time()
 
 # === BOT DISCORD ===
 intents = discord.Intents.default()
+intents.presences = True  # Autorise le changement de statut
+intents.guilds = True
 bot = discord.Client(intents=intents)
-last_ping = time.time()
 
-# === API (pour recevoir les pings depuis vote_2.py)
+# === API (ping envoyés depuis vote_2.py)
 app = FastAPI()
 
 @app.get("/ping")
 def ping():
     global last_ping
     last_ping = time.time()
-    print(f"📡 Ping reçu à {datetime.now().strftime('%H:%M:%S')}")
+    print("📡 Ping reçu depuis vote_2.py")
     return {"status": "pong"}
 
-# === Vérifie toutes les 30s si on reçoit encore les pings
+# === VERIF PING TOUTES LES 30s
 async def ping_checker():
     await bot.wait_until_ready()
     while not bot.is_closed():
-        diff = time.time() - last_ping
-        print(f"[DEBUG] Temps depuis le dernier ping : {diff:.1f} secondes")
+        now = time.time()
+        delay = now - last_ping
 
-        if diff > PING_TIMEOUT:
-            print("⚫ Aucun ping détecté depuis 60s → Bot passe hors ligne")
+        if delay > PING_TIMEOUT:
             await bot.change_presence(status=discord.Status.offline)
+            print(f"🔴 Bot Discord OFFLINE (dernier ping = {int(delay)}s)")
         else:
-            print("🟢 Ping actif → Bot reste en ligne")
             await bot.change_presence(status=discord.Status.online)
+            print(f"🟢 Bot Discord ONLINE (dernier ping = {int(delay)}s)")
 
-        await discord.utils.sleep_until(time.time() + 30)
+        await discord.utils.sleep_until(now + 30)
 
-# === Quand le bot est prêt
+# === AU DÉMARRAGE DU BOT
 @bot.event
 async def on_ready():
-    print(f"✅ Bot connecté en tant que {bot.user}")
+    print(f"✅ Connecté à Discord : {bot.user}")
     bot.loop.create_task(ping_checker())
 
-# === Lancement de l’API FastAPI
+# === LANCEMENT API FASTAPI
 def start_api():
-    print("🚀 Lancement de l'API FastAPI sur le port 8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
-# === Main
+# === MAIN
 if __name__ == "__main__":
     Thread(target=start_api).start()
-    print("🎯 Lancement du bot Discord...")
     bot.run(DISCORD_TOKEN)
